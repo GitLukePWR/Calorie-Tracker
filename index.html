@@ -2,18 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<!-- viewport: width=device-width keeps scaling correct on iOS; user-scalable=no avoids
-     the double-tap-to-zoom jump that makes tap targets feel laggy. maximum-scale=1 stops
-     iOS from auto-zooming when focusing number inputs (a common layout-shift culprit). -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f3efe7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#15140f" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#0d0f16" media="(prefers-color-scheme: dark)">
 <title>Ledger — Calorie Tracker</title>
 
-<!-- Fraunces (display) loaded from Google Fonts. This is the ONE network dependency.
-     If offline, the @font-face simply fails and the page falls back to the serif stack
-     below — the app still works fully. No functional code depends on the network. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
@@ -21,42 +15,53 @@
 <style>
 /* ============================================================
    DESIGN TOKENS
-   Palette: warm paper light mode, deep ink dark mode.
-   One accent that stays calm under budget, shifts to a quiet
-   clay-red "over" state. Everything else stays disciplined.
    ============================================================ */
 :root{
-  --paper:#f3efe7;        /* background */
-  --card:#fbf9f4;         /* raised surfaces */
-  --ink:#1c1a14;          /* primary text */
-  --ink-soft:#6b6557;     /* secondary text */
-  --hair:#e4ddcf;         /* hairline borders */
-  --accent:#4a5d4e;       /* calm: deep sage — "you have budget" */
+  --paper:#f3efe7;
+  --card:#fbf9f4;
+  --ink:#1c1a14;
+  --ink-soft:#6b6557;
+  --hair:#e4ddcf;
+  --accent:#4a5d4e;
   --accent-soft:#dfe6df;
-  --over:#a8503c;         /* warning: muted clay — "over target" */
+  --over:#a8503c;
   --over-soft:#f0dcd4;
   --radius:18px;
   --radius-sm:12px;
-  --tap:48px;             /* minimum thumb-friendly target */
+  --tap:48px;
   --pad:20px;
   --shadow:0 1px 2px rgba(40,34,20,.04), 0 8px 24px rgba(40,34,20,.05);
   --serif:'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
   --sans:-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
+
+/* Dark mode — system preference unless user has pinned light */
 @media (prefers-color-scheme: dark){
-  :root{
-    --paper:#15140f;
-    --card:#1f1d16;
-    --ink:#f0ece2;
-    --ink-soft:#9c968a;
-    --hair:#33302705;
-    --hair:#322f26;
-    --accent:#8fae93;
-    --accent-soft:#2a322b;
-    --over:#d98368;
-    --over-soft:#3a2a24;
-    --shadow:0 1px 2px rgba(0,0,0,.2), 0 8px 24px rgba(0,0,0,.3);
+  html:not([data-theme="light"]){
+    --paper:#0d0f16;
+    --card:#141722;
+    --ink:#e4e8f5;
+    --ink-soft:#7880a0;
+    --hair:#232742;
+    --accent:#60cfa8;
+    --accent-soft:#192d28;
+    --over:#f07878;
+    --over-soft:#2e1618;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.5);
   }
+}
+/* User-forced dark mode */
+html[data-theme="dark"]{
+  --paper:#0d0f16;
+  --card:#141722;
+  --ink:#e4e8f5;
+  --ink-soft:#7880a0;
+  --hair:#232742;
+  --accent:#60cfa8;
+  --accent-soft:#192d28;
+  --over:#f07878;
+  --over-soft:#2e1618;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.5);
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -68,7 +73,6 @@ body{
   font-size:16px;
   line-height:1.45;
   -webkit-font-smoothing:antialiased;
-  /* smooth, native-feeling scroll on iOS */
   -webkit-overflow-scrolling:touch;
   overscroll-behavior-y:contain;
   padding-bottom:env(safe-area-inset-bottom);
@@ -76,7 +80,7 @@ body{
 button,input,textarea{font-family:inherit;font-size:inherit;color:inherit;}
 button{cursor:pointer;border:none;background:none;}
 
-/* ---------- STICKY TOP BAR: the budget "ring" + numbers ---------- */
+/* ---------- STICKY TOP BAR ---------- */
 .topbar{
   position:sticky; top:0; z-index:50;
   background:color-mix(in srgb, var(--paper) 88%, transparent);
@@ -87,8 +91,6 @@ button{cursor:pointer;border:none;background:none;}
 }
 .topbar-row{display:flex; align-items:center; gap:18px;}
 
-/* The signature element: a budget ring that drains as you log.
-   Stroke color flips to clay when over target. SVG keeps it crisp + cheap. */
 .ring{flex:0 0 auto; width:84px; height:84px; position:relative;}
 .ring svg{transform:rotate(-90deg); display:block;}
 .ring-track{stroke:var(--hair);}
@@ -115,6 +117,17 @@ button{cursor:pointer;border:none;background:none;}
 .topbar-stat .sub{font-size:13px; color:var(--ink-soft);}
 .topbar-stat .sub b{color:var(--ink); font-weight:600;}
 .topbar-stat.is-over .big{color:var(--over);}
+
+/* Theme toggle button */
+.theme-btn{
+  flex:0 0 auto; width:40px; height:40px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--accent-soft); color:var(--accent);
+  font-size:17px; line-height:1;
+  transition:transform .15s ease, background .2s ease, color .2s ease;
+  align-self:flex-start; margin-top:4px;
+}
+.theme-btn:active{transform:scale(.88);}
 
 /* ---------- LAYOUT ---------- */
 main{padding:var(--pad); max-width:560px; margin:0 auto; display:flex; flex-direction:column; gap:24px;}
@@ -145,7 +158,6 @@ main{padding:var(--pad); max-width:560px; margin:0 auto; display:flex; flex-dire
   display:flex; align-items:center; justify-content:center;
   transition:transform .08s ease, opacity .15s ease;
 }
-@media (prefers-color-scheme: dark){ .add-btn{color:var(--paper);} }
 .add-btn:active{transform:scale(.94);}
 .add-btn:disabled{opacity:.4;}
 .note-input{
@@ -156,7 +168,6 @@ main{padding:var(--pad); max-width:560px; margin:0 auto; display:flex; flex-dire
 .note-input::placeholder{color:var(--ink-soft); opacity:.7;}
 .note-input:focus{outline:none; border-color:var(--accent);}
 
-/* quick-chip presets — one-tap common values */
 .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
 .chip{
   min-height:38px; padding:0 14px; border-radius:999px;
@@ -165,13 +176,14 @@ main{padding:var(--pad); max-width:560px; margin:0 auto; display:flex; flex-dire
   transition:transform .08s ease;
 }
 .chip:active{transform:scale(.93);}
-@media (prefers-color-scheme: dark){ .chip{color:var(--ink);} }
 
 /* ---------- AGGREGATE TILES ---------- */
 .tiles{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
 .tile{background:var(--card); border:1px solid var(--hair); border-radius:var(--radius-sm); padding:14px 12px; text-align:center;}
-.tile .v{font-family:var(--serif); font-weight:600; font-size:22px; letter-spacing:-.02em; font-variant-numeric:tabular-nums;}
-.tile .k{font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft); margin-top:4px;}
+.tile .v{font-family:var(--serif); font-weight:600; font-size:20px; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.1;}
+.tile .k{font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft); margin-top:5px;}
+.tile .v.is-over{color:var(--over);}
+.tile .v.is-under{color:var(--accent);}
 
 /* ---------- CHART ---------- */
 .chart-wrap{padding:16px 12px 8px;}
@@ -214,9 +226,7 @@ main{padding:var(--pad); max-width:560px; margin:0 auto; display:flex; flex-dire
 .history-empty{text-align:center; color:var(--ink-soft); padding:48px 20px; font-size:15px;}
 .history-empty .big{font-family:var(--serif); font-size:20px; color:var(--ink); margin-bottom:6px;}
 
-/* inline edit row — replaces the entry in place, no modal */
 .entry-edit{display:flex; gap:8px; padding:12px 16px; align-items:center; background:var(--accent-soft);}
-@media (prefers-color-scheme: dark){ .entry-edit{background:var(--accent-soft);} }
 .entry-edit input{
   height:var(--tap); padding:0 12px; border:1px solid var(--hair); border-radius:var(--radius-sm); background:var(--card);
 }
@@ -224,7 +234,6 @@ main{padding:var(--pad); max-width:560px; margin:0 auto; display:flex; flex-dire
 .entry-edit .e-note{flex:1; min-width:0;}
 .entry-edit button{height:var(--tap); padding:0 14px; border-radius:var(--radius-sm); font-weight:600;}
 .entry-edit .save{background:var(--accent); color:var(--paper);}
-@media (prefers-color-scheme: dark){ .entry-edit .save{color:var(--paper);} }
 .entry-edit .cancel{background:var(--card); color:var(--ink-soft); border:1px solid var(--hair);}
 
 /* ---------- SETTINGS / DATA ---------- */
@@ -246,7 +255,7 @@ main{padding:var(--pad); max-width:560px; margin:0 auto; display:flex; flex-dire
 .data-btn:active{transform:scale(.97);}
 .data-btn.danger{color:var(--over); border-color:var(--over-soft); grid-column:1 / -1;}
 
-/* ---------- TOAST (lightweight feedback) ---------- */
+/* ---------- TOAST ---------- */
 .toast{
   position:fixed; left:50%; bottom:calc(28px + env(safe-area-inset-bottom));
   transform:translateX(-50%) translateY(20px);
@@ -269,7 +278,6 @@ footer{text-align:center; color:var(--ink-soft); font-size:12px; padding:8px 0 2
 <!-- ============ STICKY TOP BAR ============ -->
 <header class="topbar">
   <div class="topbar-row">
-    <!-- Budget ring: drains as the day fills up -->
     <div class="ring" id="ring">
       <svg width="84" height="84" viewBox="0 0 84 84">
         <circle class="ring-track" cx="42" cy="42" r="36" fill="none" stroke-width="7"/>
@@ -286,6 +294,7 @@ footer{text-align:center; color:var(--ink-soft); font-size:12px; padding:8px 0 2
       <div class="big" id="todayTotal">0</div>
       <div class="sub" id="remainingText">— left of <b>2000</b></div>
     </div>
+    <button class="theme-btn" id="themeToggle" aria-label="Switch to dark mode">☀️</button>
   </div>
 </header>
 
@@ -294,8 +303,6 @@ footer{text-align:center; color:var(--ink-soft); font-size:12px; padding:8px 0 2
   <section>
     <div class="card quickadd">
       <div class="quickadd-main">
-        <!-- inputmode=numeric brings up the number pad on iOS without the
-             spinner quirks of type=number; pattern keeps it numeric -->
         <input class="cal-input" id="calInput" type="text" inputmode="numeric"
                pattern="[0-9]*" placeholder="0" aria-label="Calories" autocomplete="off">
         <button class="add-btn" id="addBtn" aria-label="Log entry" disabled>+</button>
@@ -310,8 +317,8 @@ footer{text-align:center; color:var(--ink-soft); font-size:12px; padding:8px 0 2
   <section>
     <div class="tiles">
       <div class="tile"><div class="v" id="aggToday">0</div><div class="k">Today</div></div>
-      <div class="tile"><div class="v" id="agg7">0</div><div class="k">7 days</div></div>
-      <div class="tile"><div class="v" id="aggAll">0</div><div class="k">All time</div></div>
+      <div class="tile"><div class="v" id="agg7">—</div><div class="k" id="agg7Lbl">7 days</div></div>
+      <div class="tile"><div class="v" id="aggAll">—</div><div class="k" id="aggAllLbl">All time</div></div>
     </div>
   </section>
 
@@ -358,25 +365,41 @@ footer{text-align:center; color:var(--ink-soft); font-size:12px; padding:8px 0 2
 
 <script>
 "use strict";
+
+/* ================================================================
+   THEME MANAGEMENT
+   Reads saved preference from localStorage; falls back to the OS
+   prefers-color-scheme value. Sets data-theme on <html> so the CSS
+   selectors [data-theme="dark"] and html:not([data-theme="light"])
+   do the right thing without JavaScript for the initial paint.
+   ================================================================ */
+(function initTheme(){
+  const saved = localStorage.getItem("theme");
+  const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const effective = saved || (systemDark ? "dark" : "light");
+  document.documentElement.setAttribute("data-theme", effective);
+})();
+
+function syncThemeButton(){
+  const theme = document.documentElement.getAttribute("data-theme");
+  const btn = document.getElementById("themeToggle");
+  if(!btn) return;
+  if(theme === "dark"){
+    btn.textContent = "☀️"; // sun — click to go light
+    btn.setAttribute("aria-label", "Switch to light mode");
+  } else {
+    btn.textContent = "🌙"; // crescent moon — click to go dark
+    btn.setAttribute("aria-label", "Switch to dark mode");
+  }
+}
+
 /* ================================================================
    STORAGE LOGIC
-   Single source of truth. Entire app state lives in one object and
-   is persisted under one localStorage key, exactly as specified.
-   Shape:
-     {
-       goal: Number,                       // daily calorie target
-       entries: [ {id, calories, note, ts} ] // ts = ISO 8601 string
-     }
    ================================================================ */
 const STORAGE_KEY = "calorieTrackerData";
 
-const defaultState = () => ({
-  goal: 2000,
-  entries: []
-});
+const defaultState = () => ({goal:2000, entries:[]});
 
-// load(): read + parse from localStorage, falling back safely if the
-// key is missing or corrupt so the app never hard-fails on launch.
 function load(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -386,19 +409,12 @@ function load(){
       goal: Number(parsed.goal) > 0 ? Number(parsed.goal) : 2000,
       entries: Array.isArray(parsed.entries) ? parsed.entries : []
     };
-  }catch(e){
-    return defaultState();
-  }
+  }catch(e){ return defaultState(); }
 }
 
-// save(): the ONLY writer. Every state mutation routes through here,
-// so persistence and re-render stay in lockstep.
 function save(){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }catch(e){
-    toast("Couldn't save — storage may be full");
-  }
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch(e){ toast("Couldn't save — storage may be full"); }
 }
 
 let state = load();
@@ -407,10 +423,8 @@ let state = load();
    HELPERS
    ================================================================ */
 const $ = id => document.getElementById(id);
-const fmt = n => Math.round(n).toLocaleString("en-US"); // thousands separators
+const fmt = n => Math.round(n).toLocaleString("en-US");
 
-// localDayKey: groups an ISO timestamp into a YYYY-MM-DD bucket using
-// LOCAL time (not UTC) so "today" matches the user's wall clock.
 function localDayKey(iso){
   const d = new Date(iso);
   const y = d.getFullYear();
@@ -420,7 +434,6 @@ function localDayKey(iso){
 }
 const todayKey = () => localDayKey(new Date().toISOString());
 
-// friendly time + relative day labels for the history list
 function friendlyTime(iso){
   return new Date(iso).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 }
@@ -434,19 +447,15 @@ function friendlyDay(key){
 
 /* ================================================================
    STATE UPDATES
-   Each mutator changes `state`, calls save(), then renderAll().
-   Centralising this means the UI is always a pure function of state.
    ================================================================ */
 function addEntry(calories, note){
   state.entries.push({
     id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
     calories: Math.round(calories),
     note: (note||"").trim(),
-    ts: new Date().toISOString()    // store ISO; format only at display time
+    ts: new Date().toISOString()
   });
-  save();
-  renderAll();
-  haptic();
+  save(); renderAll(); haptic();
 }
 
 function updateEntry(id, calories, note){
@@ -454,25 +463,21 @@ function updateEntry(id, calories, note){
   if(!e) return;
   e.calories = Math.round(calories);
   e.note = (note||"").trim();
-  save();
-  renderAll();
+  save(); renderAll();
 }
 
 function deleteEntry(id){
   state.entries = state.entries.filter(x => x.id !== id);
-  save();
-  renderAll();
-  haptic();
+  save(); renderAll(); haptic();
 }
 
 function setGoal(g){
   state.goal = Math.max(1, Math.round(g));
-  save();
-  renderAll();
+  save(); renderAll();
 }
 
 /* ================================================================
-   AGGREGATIONS — derived from state, never stored separately
+   AGGREGATIONS
    ================================================================ */
 function sumForDay(key){
   return state.entries
@@ -488,8 +493,16 @@ function last7Total(){
 function allTimeTotal(){
   return state.entries.reduce((s,e)=> s + e.calories, 0);
 }
-// dailyTotals(n): array of {key,label,total} for the last n local days,
-// oldest→newest, including empty days (total 0). Drives the chart.
+
+/* Delta: positive = over target (shown in over/red), negative = under (shown in accent/green) */
+function last7Delta(){
+  return last7Total() - (state.goal * 7);
+}
+function allTimeDelta(){
+  const trackedDays = new Set(state.entries.map(e => localDayKey(e.ts))).size;
+  return allTimeTotal() - (state.goal * trackedDays);
+}
+
 function dailyTotals(n){
   const map = {};
   state.entries.forEach(e=>{
@@ -507,10 +520,8 @@ function dailyTotals(n){
 
 /* ================================================================
    RENDER
-   renderAll() is the single re-render entry point. The chart is the
-   only expensive piece, so it's debounced separately (see below).
    ================================================================ */
-const RING_CIRC = 2 * Math.PI * 36; // 226.19, matches dasharray in markup
+const RING_CIRC = 2 * Math.PI * 36;
 
 function renderTopBar(){
   const total = sumForDay(todayKey());
@@ -520,7 +531,6 @@ function renderTopBar(){
 
   $("todayTotal").textContent = fmt(total);
 
-  // remaining / over messaging
   const stat = $("topStat");
   if(over){
     stat.classList.add("is-over");
@@ -530,7 +540,6 @@ function renderTopBar(){
     $("remainingText").innerHTML = `<b>${fmt(goal-total)}</b> left of ${fmt(goal)}`;
   }
 
-  // ring: offset shrinks as you fill the budget; clamps at full circle
   const fillPct = Math.min(pct, 1);
   $("ringFill").style.strokeDashoffset = RING_CIRC * (1 - fillPct);
   $("ring").classList.toggle("over", over);
@@ -539,15 +548,31 @@ function renderTopBar(){
 
 function renderAggregates(){
   $("aggToday").textContent = fmt(sumForDay(todayKey()));
-  $("agg7").textContent = fmt(last7Total());
-  $("aggAll").textContent = fmt(allTimeTotal());
+  $("aggToday").className = "v";
+
+  if(!state.entries.length){
+    $("agg7").textContent = "—";
+    $("agg7").className = "v";
+    $("agg7Lbl").textContent = "7 days";
+    $("aggAll").textContent = "—";
+    $("aggAll").className = "v";
+    $("aggAllLbl").textContent = "All time";
+    return;
+  }
+
+  // 7-day delta
+  const d7 = last7Delta();
+  $("agg7").textContent = (d7 >= 0 ? "+" : "−") + fmt(Math.abs(d7));
+  $("agg7").className = "v" + (d7 > 0 ? " is-over" : d7 < 0 ? " is-under" : "");
+  $("agg7Lbl").textContent = d7 > 0 ? "over 7-day" : d7 < 0 ? "under 7-day" : "on target";
+
+  // All-time delta (vs goal × tracked days)
+  const dAll = allTimeDelta();
+  $("aggAll").textContent = (dAll >= 0 ? "+" : "−") + fmt(Math.abs(dAll));
+  $("aggAll").className = "v" + (dAll > 0 ? " is-over" : dAll < 0 ? " is-under" : "");
+  $("aggAllLbl").textContent = dAll > 0 ? "over target" : dAll < 0 ? "under target" : "on target";
 }
 
-// ---------- CHART RENDERING (inline SVG, no library) ----------
-// We build an SVG line chart by hand: map each daily total to an (x,y)
-// in a fixed viewBox, draw the path, an area fill, the goal line, and
-// sparse axis labels. Inline SVG renders instantly on iOS with zero
-// network cost and no canvas/retina scaling headaches.
 function renderChart(){
   const wrap = $("chartWrap");
   const days = dailyTotals(14);
@@ -559,7 +584,6 @@ function renderChart(){
     return;
   }
 
-  // viewBox coordinate space (scales fluidly to container width via CSS)
   const W = 320, H = 150, padL = 8, padR = 8, padT = 12, padB = 22;
   const innerW = W - padL - padR, innerH = H - padT - padB;
 
@@ -567,7 +591,6 @@ function renderChart(){
   const x = i => padL + (days.length === 1 ? innerW/2 : (i/(days.length-1))*innerW);
   const y = v => padT + innerH - (v/max)*innerH;
 
-  // build the line path + area path
   let line = "", area = "";
   days.forEach((d,i)=>{
     const px = x(i).toFixed(1), py = y(d.total).toFixed(1);
@@ -578,7 +601,6 @@ function renderChart(){
 
   const goalY = y(state.goal).toFixed(1);
 
-  // sparse dots + ~4 date labels so the axis never crowds on mobile
   let dots = "", labels = "";
   const labelEvery = Math.ceil(days.length/4);
   days.forEach((d,i)=>{
@@ -587,7 +609,6 @@ function renderChart(){
     }
     if(i % labelEvery === 0 || i === days.length-1){
       const lbl = d.date.toLocaleDateString("en-US",{month:"numeric",day:"numeric"});
-      dots; // noop
       labels += `<text class="chart-axis" x="${x(i).toFixed(1)}" y="${H-6}" text-anchor="middle">${lbl}</text>`;
     }
   });
@@ -602,8 +623,6 @@ function renderChart(){
     </svg>`;
 }
 
-// debounce: the chart is the one "expensive" render. We coalesce rapid
-// state changes (e.g. typing in the goal field) into a single redraw.
 let chartTimer = null;
 function renderChartDebounced(){
   clearTimeout(chartTimer);
@@ -621,7 +640,6 @@ function renderHistory(){
     return;
   }
 
-  // newest first; then group under day dividers with that day's subtotal
   const sorted = [...state.entries].sort((a,b)=> new Date(b.ts) - new Date(a.ts));
   let html = "", lastDay = null;
   sorted.forEach(e=>{
@@ -641,8 +659,8 @@ function renderHistory(){
           <div class="entry-time">${friendlyTime(e.ts)}</div>
         </div>
         <div class="entry-actions">
-          <button class="icon-btn" data-act="edit" aria-label="Edit">✎</button>
-          <button class="icon-btn" data-act="del" aria-label="Delete">✕</button>
+          <button class="icon-btn" data-act="edit" aria-label="Edit">&#9998;</button>
+          <button class="icon-btn" data-act="del" aria-label="Delete">&#10005;</button>
         </div>
       </div>`;
   });
@@ -651,10 +669,9 @@ function renderHistory(){
 
 function renderGoalField(){
   const f = $("goalInput");
-  if(document.activeElement !== f) f.value = state.goal; // don't fight the user mid-type
+  if(document.activeElement !== f) f.value = state.goal;
 }
 
-// renderAll: cheap renders run immediately; chart is debounced.
 function renderAll(){
   renderTopBar();
   renderAggregates();
@@ -664,7 +681,7 @@ function renderAll(){
 }
 
 /* ================================================================
-   INLINE EDITING — swap an entry row for an edit row, no modal
+   INLINE EDITING
    ================================================================ */
 function openEdit(id){
   const e = state.entries.find(x => x.id === id);
@@ -689,16 +706,13 @@ function openEdit(id){
 }
 
 /* ================================================================
-   INPUT / EVENT WIRING
+   UTILITIES
    ================================================================ */
 function escapeHtml(s){
   return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function escapeAttr(s){ return escapeHtml(s); }
 
-// haptic-style feedback: a 10ms vibrate where supported. iOS Safari
-// largely ignores navigator.vibrate, so this is a graceful no-op there —
-// the visual :active scale animations carry the tactile feel instead.
 function haptic(){ try{ if(navigator.vibrate) navigator.vibrate(8); }catch(e){} }
 
 let toastTimer = null;
@@ -709,6 +723,20 @@ function toast(msg){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=> t.classList.remove("show"), 1800);
 }
+
+/* ================================================================
+   INPUT / EVENT WIRING
+   ================================================================ */
+
+// ----- Theme toggle -----
+syncThemeButton();
+$("themeToggle").addEventListener("click", ()=>{
+  const current = document.documentElement.getAttribute("data-theme");
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("theme", next);
+  syncThemeButton();
+});
 
 // ----- Quick add -----
 const calInput = $("calInput");
@@ -726,16 +754,15 @@ function commitAdd(){
   calInput.value = "";
   noteInput.value = "";
   refreshAddBtn();
-  calInput.focus(); // keep flow fast for back-to-back logging
+  calInput.focus();
   toast("Logged " + fmt(v) + " cal");
 }
 calInput.addEventListener("input", refreshAddBtn);
 addBtn.addEventListener("click", commitAdd);
-// Enter on the calorie field logs immediately (≤2 taps: type, return)
 calInput.addEventListener("keydown", e=>{ if(e.key==="Enter") commitAdd(); });
 noteInput.addEventListener("keydown", e=>{ if(e.key==="Enter") commitAdd(); });
 
-// ----- Preset chips (one-tap common amounts) -----
+// ----- Preset chips -----
 const PRESETS = [100, 250, 400, 600];
 $("chips").innerHTML = PRESETS.map(p=>`<button class="chip" data-cal="${p}">+${p}</button>`).join("");
 $("chips").addEventListener("click", e=>{
@@ -745,7 +772,7 @@ $("chips").addEventListener("click", e=>{
   toast("Logged " + b.dataset.cal + " cal");
 });
 
-// ----- History actions (event delegation = no per-row listeners) -----
+// ----- History actions -----
 $("history").addEventListener("click", e=>{
   const btn = e.target.closest("[data-act]"); if(!btn) return;
   const id = btn.closest(".entry").dataset.id;
@@ -759,14 +786,12 @@ $("history").addEventListener("click", e=>{
 const goalInput = $("goalInput");
 goalInput.addEventListener("input", ()=>{
   const v = parseInt(goalInput.value,10);
-  if(Number.isFinite(v) && v>0) setGoal(v); // live update; renderGoalField won't clobber while focused
+  if(Number.isFinite(v) && v>0) setGoal(v);
 });
 goalInput.addEventListener("blur", renderGoalField);
 
 // ----- Data: export -----
 $("exportBtn").addEventListener("click", ()=>{
-  // Blob + object URL download. This is the standard, Safari-safe way to
-  // save a file with no filesystem API — works in mobile Safari.
   const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -788,7 +813,6 @@ $("fileInput").addEventListener("change", e=>{
     try{
       const data = JSON.parse(reader.result);
       if(!data || !Array.isArray(data.entries)) throw new Error("bad shape");
-      // sanitise imported entries so a hand-edited file can't break the app
       state = {
         goal: Number(data.goal) > 0 ? Math.round(Number(data.goal)) : 2000,
         entries: data.entries
@@ -806,7 +830,7 @@ $("fileInput").addEventListener("change", e=>{
     }catch(err){
       toast("Couldn't read that file");
     }
-    $("fileInput").value = ""; // allow re-importing the same file
+    $("fileInput").value = "";
   };
   reader.readAsText(file);
 });
@@ -822,7 +846,7 @@ $("clearBtn").addEventListener("click", ()=>{
 
 // ----- Initial paint -----
 renderAll();
-renderChart(); // force one synchronous chart draw on load (skip the debounce)
+renderChart();
 </script>
 </body>
 </html>
