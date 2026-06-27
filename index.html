@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- viewport: width=device-width keeps scaling correct on iOS; user-scalable=no avoids
+     the double-tap-to-zoom jump that makes tap targets feel laggy. maximum-scale=1 stops
+     iOS from auto-zooming when focusing number inputs (a common layout-shift culprit). -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f3efe7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#15140f" media="(prefers-color-scheme: dark)">
+<title>Ledger — Calorie Tracker</title>
+
+<!-- Fraunces (display) loaded from Google Fonts. This is the ONE network dependency.
+     If offline, the @font-face simply fails and the page falls back to the serif stack
+     below — the app still works fully. No functional code depends on the network. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   Palette: warm paper light mode, deep ink dark mode.
+   One accent that stays calm under budget, shifts to a quiet
+   clay-red "over" state. Everything else stays disciplined.
+   ============================================================ */
+:root{
+  --paper:#f3efe7;        /* background */
+  --card:#fbf9f4;         /* raised surfaces */
+  --ink:#1c1a14;          /* primary text */
+  --ink-soft:#6b6557;     /* secondary text */
+  --hair:#e4ddcf;         /* hairline borders */
+  --accent:#4a5d4e;       /* calm: deep sage — "you have budget" */
+  --accent-soft:#dfe6df;
+  --over:#a8503c;         /* warning: muted clay — "over target" */
+  --over-soft:#f0dcd4;
+  --radius:18px;
+  --radius-sm:12px;
+  --tap:48px;             /* minimum thumb-friendly target */
+  --pad:20px;
+  --shadow:0 1px 2px rgba(40,34,20,.04), 0 8px 24px rgba(40,34,20,.05);
+  --serif:'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
+  --sans:-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#15140f;
+    --card:#1f1d16;
+    --ink:#f0ece2;
+    --ink-soft:#9c968a;
+    --hair:#33302705;
+    --hair:#322f26;
+    --accent:#8fae93;
+    --accent-soft:#2a322b;
+    --over:#d98368;
+    --over-soft:#3a2a24;
+    --shadow:0 1px 2px rgba(0,0,0,.2), 0 8px 24px rgba(0,0,0,.3);
+  }
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  /* smooth, native-feeling scroll on iOS */
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+button,input,textarea{font-family:inherit;font-size:inherit;color:inherit;}
+button{cursor:pointer;border:none;background:none;}
+
+/* ---------- STICKY TOP BAR: the budget "ring" + numbers ---------- */
+.topbar{
+  position:sticky; top:0; z-index:50;
+  background:color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter:saturate(140%) blur(14px);
+  -webkit-backdrop-filter:saturate(140%) blur(14px);
+  border-bottom:1px solid var(--hair);
+  padding:calc(env(safe-area-inset-top) + 14px) var(--pad) 16px;
+}
+.topbar-row{display:flex; align-items:center; gap:18px;}
+
+/* The signature element: a budget ring that drains as you log.
+   Stroke color flips to clay when over target. SVG keeps it crisp + cheap. */
+.ring{flex:0 0 auto; width:84px; height:84px; position:relative;}
+.ring svg{transform:rotate(-90deg); display:block;}
+.ring-track{stroke:var(--hair);}
+.ring-fill{
+  stroke:var(--accent);
+  stroke-linecap:round;
+  transition:stroke-dashoffset .5s cubic-bezier(.4,.0,.2,1), stroke .3s ease;
+}
+.ring.over .ring-fill{stroke:var(--over);}
+.ring-center{
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; text-align:center;
+}
+.ring-center .num{font-family:var(--serif); font-weight:600; font-size:19px; line-height:1; letter-spacing:-.02em;}
+.ring-center .lbl{font-size:9px; text-transform:uppercase; letter-spacing:.12em; color:var(--ink-soft); margin-top:3px;}
+
+.topbar-stat{flex:1; min-width:0;}
+.topbar-stat .eyebrow{font-size:11px; text-transform:uppercase; letter-spacing:.14em; color:var(--ink-soft);}
+.topbar-stat .big{
+  font-family:var(--serif); font-weight:600; letter-spacing:-.02em;
+  font-size:34px; line-height:1.05; margin:2px 0;
+  font-variant-numeric:tabular-nums;
+}
+.topbar-stat .sub{font-size:13px; color:var(--ink-soft);}
+.topbar-stat .sub b{color:var(--ink); font-weight:600;}
+.topbar-stat.is-over .big{color:var(--over);}
+
+/* ---------- LAYOUT ---------- */
+main{padding:var(--pad); max-width:560px; margin:0 auto; display:flex; flex-direction:column; gap:24px;}
+.section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px;}
+.section-head h2{
+  font-family:var(--serif); font-weight:500; font-size:15px;
+  text-transform:uppercase; letter-spacing:.1em; margin:0; color:var(--ink-soft);
+}
+.section-head .meta{font-size:13px; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
+
+.card{background:var(--card); border:1px solid var(--hair); border-radius:var(--radius); box-shadow:var(--shadow);}
+
+/* ---------- QUICK ADD ---------- */
+.quickadd{padding:16px;}
+.quickadd-main{display:flex; gap:10px; align-items:stretch;}
+.cal-input{
+  flex:1; min-width:0; height:56px; padding:0 16px;
+  background:var(--paper); border:1px solid var(--hair); border-radius:var(--radius-sm);
+  font-family:var(--serif); font-size:24px; font-weight:500; letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;
+}
+.cal-input::placeholder{color:var(--ink-soft); font-weight:400; opacity:.6;}
+.cal-input:focus{outline:none; border-color:var(--accent);}
+.add-btn{
+  flex:0 0 auto; width:64px; border-radius:var(--radius-sm);
+  background:var(--accent); color:var(--paper);
+  font-size:30px; font-weight:300; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+  transition:transform .08s ease, opacity .15s ease;
+}
+@media (prefers-color-scheme: dark){ .add-btn{color:var(--paper);} }
+.add-btn:active{transform:scale(.94);}
+.add-btn:disabled{opacity:.4;}
+.note-input{
+  margin-top:10px; width:100%; height:var(--tap); padding:0 16px;
+  background:var(--paper); border:1px solid var(--hair); border-radius:var(--radius-sm);
+  font-size:15px;
+}
+.note-input::placeholder{color:var(--ink-soft); opacity:.7;}
+.note-input:focus{outline:none; border-color:var(--accent);}
+
+/* quick-chip presets — one-tap common values */
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+.chip{
+  min-height:38px; padding:0 14px; border-radius:999px;
+  background:var(--accent-soft); color:var(--accent);
+  font-size:14px; font-weight:600; font-variant-numeric:tabular-nums;
+  transition:transform .08s ease;
+}
+.chip:active{transform:scale(.93);}
+@media (prefers-color-scheme: dark){ .chip{color:var(--ink);} }
+
+/* ---------- AGGREGATE TILES ---------- */
+.tiles{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
+.tile{background:var(--card); border:1px solid var(--hair); border-radius:var(--radius-sm); padding:14px 12px; text-align:center;}
+.tile .v{font-family:var(--serif); font-weight:600; font-size:22px; letter-spacing:-.02em; font-variant-numeric:tabular-nums;}
+.tile .k{font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft); margin-top:4px;}
+
+/* ---------- CHART ---------- */
+.chart-wrap{padding:16px 12px 8px;}
+.chart-wrap svg{display:block; width:100%; height:auto; overflow:visible;}
+.chart-line{fill:none; stroke:var(--accent); stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round;}
+.chart-area{fill:var(--accent); opacity:.08;}
+.chart-goal{stroke:var(--over); stroke-width:1.5; stroke-dasharray:3 4; opacity:.6;}
+.chart-dot{fill:var(--card); stroke:var(--accent); stroke-width:2;}
+.chart-axis{fill:var(--ink-soft); font-size:10px; font-family:var(--sans);}
+.chart-empty{text-align:center; color:var(--ink-soft); padding:40px 0; font-size:14px;}
+
+/* ---------- HISTORY ---------- */
+.entry{
+  display:flex; align-items:center; gap:14px;
+  padding:14px 16px; border-bottom:1px solid var(--hair);
+}
+.entry:last-child{border-bottom:none;}
+.entry-cal{
+  flex:0 0 auto; font-family:var(--serif); font-weight:600; font-size:19px;
+  letter-spacing:-.02em; font-variant-numeric:tabular-nums; min-width:62px;
+}
+.entry-cal small{font-size:11px; font-weight:400; color:var(--ink-soft); letter-spacing:0;}
+.entry-body{flex:1; min-width:0;}
+.entry-note{font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.entry-note.empty{color:var(--ink-soft); font-style:italic; opacity:.7;}
+.entry-time{font-size:12px; color:var(--ink-soft); margin-top:1px;}
+.entry-actions{flex:0 0 auto; display:flex; gap:4px;}
+.icon-btn{
+  width:var(--tap); height:var(--tap); border-radius:var(--radius-sm);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--ink-soft); font-size:18px;
+  transition:background .15s ease, transform .08s ease;
+}
+.icon-btn:active{transform:scale(.9); background:var(--accent-soft);}
+.day-divider{
+  padding:18px 16px 6px; font-size:11px; text-transform:uppercase;
+  letter-spacing:.12em; color:var(--ink-soft); font-weight:600;
+}
+.day-divider span{float:right; font-weight:400; text-transform:none; letter-spacing:0; font-variant-numeric:tabular-nums;}
+.history-empty{text-align:center; color:var(--ink-soft); padding:48px 20px; font-size:15px;}
+.history-empty .big{font-family:var(--serif); font-size:20px; color:var(--ink); margin-bottom:6px;}
+
+/* inline edit row — replaces the entry in place, no modal */
+.entry-edit{display:flex; gap:8px; padding:12px 16px; align-items:center; background:var(--accent-soft);}
+@media (prefers-color-scheme: dark){ .entry-edit{background:var(--accent-soft);} }
+.entry-edit input{
+  height:var(--tap); padding:0 12px; border:1px solid var(--hair); border-radius:var(--radius-sm); background:var(--card);
+}
+.entry-edit .e-cal{width:90px; font-variant-numeric:tabular-nums; font-weight:600;}
+.entry-edit .e-note{flex:1; min-width:0;}
+.entry-edit button{height:var(--tap); padding:0 14px; border-radius:var(--radius-sm); font-weight:600;}
+.entry-edit .save{background:var(--accent); color:var(--paper);}
+@media (prefers-color-scheme: dark){ .entry-edit .save{color:var(--paper);} }
+.entry-edit .cancel{background:var(--card); color:var(--ink-soft); border:1px solid var(--hair);}
+
+/* ---------- SETTINGS / DATA ---------- */
+.goal-row{display:flex; align-items:center; gap:12px; padding:16px;}
+.goal-row label{flex:1; font-size:15px;}
+.goal-row label small{display:block; color:var(--ink-soft); font-size:12px;}
+.goal-input{
+  width:120px; height:var(--tap); padding:0 14px; text-align:right;
+  background:var(--paper); border:1px solid var(--hair); border-radius:var(--radius-sm);
+  font-family:var(--serif); font-weight:600; font-size:19px; font-variant-numeric:tabular-nums;
+}
+.goal-input:focus{outline:none; border-color:var(--accent);}
+.data-btns{display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:16px; padding-top:0;}
+.data-btn{
+  min-height:var(--tap); border-radius:var(--radius-sm); padding:0 14px;
+  border:1px solid var(--hair); background:var(--paper); color:var(--ink);
+  font-size:14px; font-weight:600; transition:transform .08s ease;
+}
+.data-btn:active{transform:scale(.97);}
+.data-btn.danger{color:var(--over); border-color:var(--over-soft); grid-column:1 / -1;}
+
+/* ---------- TOAST (lightweight feedback) ---------- */
+.toast{
+  position:fixed; left:50%; bottom:calc(28px + env(safe-area-inset-bottom));
+  transform:translateX(-50%) translateY(20px);
+  background:var(--ink); color:var(--paper);
+  padding:12px 20px; border-radius:999px; font-size:14px; font-weight:500;
+  opacity:0; pointer-events:none; transition:opacity .2s ease, transform .2s ease; z-index:100;
+  box-shadow:0 8px 30px rgba(0,0,0,.2);
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+footer{text-align:center; color:var(--ink-soft); font-size:12px; padding:8px 0 24px;}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important;}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ STICKY TOP BAR ============ -->
+<header class="topbar">
+  <div class="topbar-row">
+    <!-- Budget ring: drains as the day fills up -->
+    <div class="ring" id="ring">
+      <svg width="84" height="84" viewBox="0 0 84 84">
+        <circle class="ring-track" cx="42" cy="42" r="36" fill="none" stroke-width="7"/>
+        <circle class="ring-fill" id="ringFill" cx="42" cy="42" r="36" fill="none" stroke-width="7"
+                stroke-dasharray="226.19" stroke-dashoffset="226.19"/>
+      </svg>
+      <div class="ring-center">
+        <div class="num" id="ringPct">0%</div>
+        <div class="lbl">used</div>
+      </div>
+    </div>
+    <div class="topbar-stat" id="topStat">
+      <div class="eyebrow">Today</div>
+      <div class="big" id="todayTotal">0</div>
+      <div class="sub" id="remainingText">— left of <b>2000</b></div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ============ QUICK ADD ============ -->
+  <section>
+    <div class="card quickadd">
+      <div class="quickadd-main">
+        <!-- inputmode=numeric brings up the number pad on iOS without the
+             spinner quirks of type=number; pattern keeps it numeric -->
+        <input class="cal-input" id="calInput" type="text" inputmode="numeric"
+               pattern="[0-9]*" placeholder="0" aria-label="Calories" autocomplete="off">
+        <button class="add-btn" id="addBtn" aria-label="Log entry" disabled>+</button>
+      </div>
+      <input class="note-input" id="noteInput" type="text" placeholder="Note (optional)"
+             aria-label="Note" autocomplete="off" maxlength="60">
+      <div class="chips" id="chips"></div>
+    </div>
+  </section>
+
+  <!-- ============ AGGREGATES ============ -->
+  <section>
+    <div class="tiles">
+      <div class="tile"><div class="v" id="aggToday">0</div><div class="k">Today</div></div>
+      <div class="tile"><div class="v" id="agg7">0</div><div class="k">7 days</div></div>
+      <div class="tile"><div class="v" id="aggAll">0</div><div class="k">All time</div></div>
+    </div>
+  </section>
+
+  <!-- ============ CHART ============ -->
+  <section>
+    <div class="section-head">
+      <h2>Daily totals</h2>
+      <span class="meta" id="chartRange">last 14 days</span>
+    </div>
+    <div class="card chart-wrap" id="chartWrap"></div>
+  </section>
+
+  <!-- ============ HISTORY ============ -->
+  <section>
+    <div class="section-head">
+      <h2>History</h2>
+      <span class="meta" id="entryCount"></span>
+    </div>
+    <div class="card" id="history"></div>
+  </section>
+
+  <!-- ============ GOAL + DATA ============ -->
+  <section>
+    <div class="section-head"><h2>Settings</h2></div>
+    <div class="card">
+      <div class="goal-row">
+        <label>Daily target<small>Calories per day</small></label>
+        <input class="goal-input" id="goalInput" type="text" inputmode="numeric"
+               pattern="[0-9]*" aria-label="Daily target">
+      </div>
+      <div class="data-btns">
+        <button class="data-btn" id="exportBtn">Export JSON</button>
+        <button class="data-btn" id="importBtn">Import JSON</button>
+        <button class="data-btn danger" id="clearBtn">Clear all data</button>
+      </div>
+    </div>
+  </section>
+
+  <footer>Stored on this device only.</footer>
+</main>
+
+<input type="file" id="fileInput" accept="application/json,.json" style="display:none">
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ================================================================
+   STORAGE LOGIC
+   Single source of truth. Entire app state lives in one object and
+   is persisted under one localStorage key, exactly as specified.
+   Shape:
+     {
+       goal: Number,                       // daily calorie target
+       entries: [ {id, calories, note, ts} ] // ts = ISO 8601 string
+     }
+   ================================================================ */
+const STORAGE_KEY = "calorieTrackerData";
+
+const defaultState = () => ({
+  goal: 2000,
+  entries: []
+});
+
+// load(): read + parse from localStorage, falling back safely if the
+// key is missing or corrupt so the app never hard-fails on launch.
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    return {
+      goal: Number(parsed.goal) > 0 ? Number(parsed.goal) : 2000,
+      entries: Array.isArray(parsed.entries) ? parsed.entries : []
+    };
+  }catch(e){
+    return defaultState();
+  }
+}
+
+// save(): the ONLY writer. Every state mutation routes through here,
+// so persistence and re-render stay in lockstep.
+function save(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }catch(e){
+    toast("Couldn't save — storage may be full");
+  }
+}
+
+let state = load();
+
+/* ================================================================
+   HELPERS
+   ================================================================ */
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString("en-US"); // thousands separators
+
+// localDayKey: groups an ISO timestamp into a YYYY-MM-DD bucket using
+// LOCAL time (not UTC) so "today" matches the user's wall clock.
+function localDayKey(iso){
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+const todayKey = () => localDayKey(new Date().toISOString());
+
+// friendly time + relative day labels for the history list
+function friendlyTime(iso){
+  return new Date(iso).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+}
+function friendlyDay(key){
+  if(key === todayKey()) return "Today";
+  const d = new Date(); d.setDate(d.getDate()-1);
+  if(key === localDayKey(d.toISOString())) return "Yesterday";
+  return new Date(key+"T00:00:00").toLocaleDateString("en-US",
+    {weekday:"short", month:"short", day:"numeric"});
+}
+
+/* ================================================================
+   STATE UPDATES
+   Each mutator changes `state`, calls save(), then renderAll().
+   Centralising this means the UI is always a pure function of state.
+   ================================================================ */
+function addEntry(calories, note){
+  state.entries.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    calories: Math.round(calories),
+    note: (note||"").trim(),
+    ts: new Date().toISOString()    // store ISO; format only at display time
+  });
+  save();
+  renderAll();
+  haptic();
+}
+
+function updateEntry(id, calories, note){
+  const e = state.entries.find(x => x.id === id);
+  if(!e) return;
+  e.calories = Math.round(calories);
+  e.note = (note||"").trim();
+  save();
+  renderAll();
+}
+
+function deleteEntry(id){
+  state.entries = state.entries.filter(x => x.id !== id);
+  save();
+  renderAll();
+  haptic();
+}
+
+function setGoal(g){
+  state.goal = Math.max(1, Math.round(g));
+  save();
+  renderAll();
+}
+
+/* ================================================================
+   AGGREGATIONS — derived from state, never stored separately
+   ================================================================ */
+function sumForDay(key){
+  return state.entries
+    .filter(e => localDayKey(e.ts) === key)
+    .reduce((s,e)=> s + e.calories, 0);
+}
+function last7Total(){
+  const cutoff = new Date(); cutoff.setHours(0,0,0,0); cutoff.setDate(cutoff.getDate()-6);
+  return state.entries
+    .filter(e => new Date(e.ts) >= cutoff)
+    .reduce((s,e)=> s + e.calories, 0);
+}
+function allTimeTotal(){
+  return state.entries.reduce((s,e)=> s + e.calories, 0);
+}
+// dailyTotals(n): array of {key,label,total} for the last n local days,
+// oldest→newest, including empty days (total 0). Drives the chart.
+function dailyTotals(n){
+  const map = {};
+  state.entries.forEach(e=>{
+    const k = localDayKey(e.ts);
+    map[k] = (map[k]||0) + e.calories;
+  });
+  const out = [];
+  for(let i=n-1; i>=0; i--){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const k = localDayKey(d.toISOString());
+    out.push({ key:k, total: map[k]||0, date:d });
+  }
+  return out;
+}
+
+/* ================================================================
+   RENDER
+   renderAll() is the single re-render entry point. The chart is the
+   only expensive piece, so it's debounced separately (see below).
+   ================================================================ */
+const RING_CIRC = 2 * Math.PI * 36; // 226.19, matches dasharray in markup
+
+function renderTopBar(){
+  const total = sumForDay(todayKey());
+  const goal = state.goal;
+  const pct = goal > 0 ? total/goal : 0;
+  const over = total > goal;
+
+  $("todayTotal").textContent = fmt(total);
+
+  // remaining / over messaging
+  const stat = $("topStat");
+  if(over){
+    stat.classList.add("is-over");
+    $("remainingText").innerHTML = `<b>${fmt(total-goal)}</b> over your ${fmt(goal)} target`;
+  }else{
+    stat.classList.remove("is-over");
+    $("remainingText").innerHTML = `<b>${fmt(goal-total)}</b> left of ${fmt(goal)}`;
+  }
+
+  // ring: offset shrinks as you fill the budget; clamps at full circle
+  const fillPct = Math.min(pct, 1);
+  $("ringFill").style.strokeDashoffset = RING_CIRC * (1 - fillPct);
+  $("ring").classList.toggle("over", over);
+  $("ringPct").textContent = Math.round(pct*100) + "%";
+}
+
+function renderAggregates(){
+  $("aggToday").textContent = fmt(sumForDay(todayKey()));
+  $("agg7").textContent = fmt(last7Total());
+  $("aggAll").textContent = fmt(allTimeTotal());
+}
+
+// ---------- CHART RENDERING (inline SVG, no library) ----------
+// We build an SVG line chart by hand: map each daily total to an (x,y)
+// in a fixed viewBox, draw the path, an area fill, the goal line, and
+// sparse axis labels. Inline SVG renders instantly on iOS with zero
+// network cost and no canvas/retina scaling headaches.
+function renderChart(){
+  const wrap = $("chartWrap");
+  const days = dailyTotals(14);
+  $("chartRange").textContent = "last 14 days";
+
+  const hasData = days.some(d => d.total > 0);
+  if(!hasData){
+    wrap.innerHTML = '<div class="chart-empty">No entries yet — your daily totals will appear here.</div>';
+    return;
+  }
+
+  // viewBox coordinate space (scales fluidly to container width via CSS)
+  const W = 320, H = 150, padL = 8, padR = 8, padT = 12, padB = 22;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+
+  const max = Math.max(state.goal, ...days.map(d=>d.total)) * 1.12;
+  const x = i => padL + (days.length === 1 ? innerW/2 : (i/(days.length-1))*innerW);
+  const y = v => padT + innerH - (v/max)*innerH;
+
+  // build the line path + area path
+  let line = "", area = "";
+  days.forEach((d,i)=>{
+    const px = x(i).toFixed(1), py = y(d.total).toFixed(1);
+    line += (i===0?"M":"L") + px + " " + py + " ";
+    area += (i===0? "M"+px+" "+(padT+innerH)+" L"+px+" "+py : " L"+px+" "+py);
+  });
+  area += ` L${x(days.length-1).toFixed(1)} ${padT+innerH} Z`;
+
+  const goalY = y(state.goal).toFixed(1);
+
+  // sparse dots + ~4 date labels so the axis never crowds on mobile
+  let dots = "", labels = "";
+  const labelEvery = Math.ceil(days.length/4);
+  days.forEach((d,i)=>{
+    if(d.total>0){
+      dots += `<circle class="chart-dot" cx="${x(i).toFixed(1)}" cy="${y(d.total).toFixed(1)}" r="3"/>`;
+    }
+    if(i % labelEvery === 0 || i === days.length-1){
+      const lbl = d.date.toLocaleDateString("en-US",{month:"numeric",day:"numeric"});
+      dots; // noop
+      labels += `<text class="chart-axis" x="${x(i).toFixed(1)}" y="${H-6}" text-anchor="middle">${lbl}</text>`;
+    }
+  });
+
+  wrap.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Daily calorie totals, last 14 days">
+      <path class="chart-area" d="${area}"/>
+      <line class="chart-goal" x1="${padL}" y1="${goalY}" x2="${W-padR}" y2="${goalY}"/>
+      <path class="chart-line" d="${line}"/>
+      ${dots}
+      ${labels}
+    </svg>`;
+}
+
+// debounce: the chart is the one "expensive" render. We coalesce rapid
+// state changes (e.g. typing in the goal field) into a single redraw.
+let chartTimer = null;
+function renderChartDebounced(){
+  clearTimeout(chartTimer);
+  chartTimer = setTimeout(renderChart, 120);
+}
+
+function renderHistory(){
+  const host = $("history");
+  $("entryCount").textContent = state.entries.length
+    ? state.entries.length + (state.entries.length===1?" entry":" entries") : "";
+
+  if(!state.entries.length){
+    host.innerHTML = '<div class="history-empty"><div class="big">Nothing logged yet</div>'
+      + 'Add your first entry above to get started.</div>';
+    return;
+  }
+
+  // newest first; then group under day dividers with that day's subtotal
+  const sorted = [...state.entries].sort((a,b)=> new Date(b.ts) - new Date(a.ts));
+  let html = "", lastDay = null;
+  sorted.forEach(e=>{
+    const key = localDayKey(e.ts);
+    if(key !== lastDay){
+      lastDay = key;
+      html += `<div class="day-divider">${friendlyDay(key)}<span>${fmt(sumForDay(key))} cal</span></div>`;
+    }
+    const noteHtml = e.note
+      ? `<div class="entry-note">${escapeHtml(e.note)}</div>`
+      : `<div class="entry-note empty">No note</div>`;
+    html += `
+      <div class="entry" data-id="${e.id}">
+        <div class="entry-cal">${fmt(e.calories)}<small> cal</small></div>
+        <div class="entry-body">
+          ${noteHtml}
+          <div class="entry-time">${friendlyTime(e.ts)}</div>
+        </div>
+        <div class="entry-actions">
+          <button class="icon-btn" data-act="edit" aria-label="Edit">✎</button>
+          <button class="icon-btn" data-act="del" aria-label="Delete">✕</button>
+        </div>
+      </div>`;
+  });
+  host.innerHTML = html;
+}
+
+function renderGoalField(){
+  const f = $("goalInput");
+  if(document.activeElement !== f) f.value = state.goal; // don't fight the user mid-type
+}
+
+// renderAll: cheap renders run immediately; chart is debounced.
+function renderAll(){
+  renderTopBar();
+  renderAggregates();
+  renderHistory();
+  renderGoalField();
+  renderChartDebounced();
+}
+
+/* ================================================================
+   INLINE EDITING — swap an entry row for an edit row, no modal
+   ================================================================ */
+function openEdit(id){
+  const e = state.entries.find(x => x.id === id);
+  const row = document.querySelector(`.entry[data-id="${id}"]`);
+  if(!e || !row) return;
+  const edit = document.createElement("div");
+  edit.className = "entry-edit";
+  edit.innerHTML = `
+    <input class="e-cal" type="text" inputmode="numeric" pattern="[0-9]*" value="${e.calories}" aria-label="Calories">
+    <input class="e-note" type="text" value="${escapeAttr(e.note)}" placeholder="Note" maxlength="60" aria-label="Note">
+    <button class="save">Save</button>
+    <button class="cancel">Cancel</button>`;
+  row.replaceWith(edit);
+  const calF = edit.querySelector(".e-cal");
+  calF.focus(); calF.select();
+  edit.querySelector(".save").onclick = ()=>{
+    const v = parseInt(calF.value,10);
+    if(!Number.isFinite(v) || v<0){ toast("Enter a valid number"); return; }
+    updateEntry(id, v, edit.querySelector(".e-note").value);
+  };
+  edit.querySelector(".cancel").onclick = renderHistory;
+}
+
+/* ================================================================
+   INPUT / EVENT WIRING
+   ================================================================ */
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function escapeAttr(s){ return escapeHtml(s); }
+
+// haptic-style feedback: a 10ms vibrate where supported. iOS Safari
+// largely ignores navigator.vibrate, so this is a graceful no-op there —
+// the visual :active scale animations carry the tactile feel instead.
+function haptic(){ try{ if(navigator.vibrate) navigator.vibrate(8); }catch(e){} }
+
+let toastTimer = null;
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove("show"), 1800);
+}
+
+// ----- Quick add -----
+const calInput = $("calInput");
+const noteInput = $("noteInput");
+const addBtn = $("addBtn");
+
+function refreshAddBtn(){
+  const v = parseInt(calInput.value,10);
+  addBtn.disabled = !(Number.isFinite(v) && v>0);
+}
+function commitAdd(){
+  const v = parseInt(calInput.value,10);
+  if(!Number.isFinite(v) || v<=0) return;
+  addEntry(v, noteInput.value);
+  calInput.value = "";
+  noteInput.value = "";
+  refreshAddBtn();
+  calInput.focus(); // keep flow fast for back-to-back logging
+  toast("Logged " + fmt(v) + " cal");
+}
+calInput.addEventListener("input", refreshAddBtn);
+addBtn.addEventListener("click", commitAdd);
+// Enter on the calorie field logs immediately (≤2 taps: type, return)
+calInput.addEventListener("keydown", e=>{ if(e.key==="Enter") commitAdd(); });
+noteInput.addEventListener("keydown", e=>{ if(e.key==="Enter") commitAdd(); });
+
+// ----- Preset chips (one-tap common amounts) -----
+const PRESETS = [100, 250, 400, 600];
+$("chips").innerHTML = PRESETS.map(p=>`<button class="chip" data-cal="${p}">+${p}</button>`).join("");
+$("chips").addEventListener("click", e=>{
+  const b = e.target.closest(".chip"); if(!b) return;
+  addEntry(parseInt(b.dataset.cal,10), noteInput.value);
+  noteInput.value = "";
+  toast("Logged " + b.dataset.cal + " cal");
+});
+
+// ----- History actions (event delegation = no per-row listeners) -----
+$("history").addEventListener("click", e=>{
+  const btn = e.target.closest("[data-act]"); if(!btn) return;
+  const id = btn.closest(".entry").dataset.id;
+  if(btn.dataset.act === "edit") openEdit(id);
+  if(btn.dataset.act === "del"){
+    if(confirm("Delete this entry?")) deleteEntry(id);
+  }
+});
+
+// ----- Goal -----
+const goalInput = $("goalInput");
+goalInput.addEventListener("input", ()=>{
+  const v = parseInt(goalInput.value,10);
+  if(Number.isFinite(v) && v>0) setGoal(v); // live update; renderGoalField won't clobber while focused
+});
+goalInput.addEventListener("blur", renderGoalField);
+
+// ----- Data: export -----
+$("exportBtn").addEventListener("click", ()=>{
+  // Blob + object URL download. This is the standard, Safari-safe way to
+  // save a file with no filesystem API — works in mobile Safari.
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "calorie-data-" + todayKey() + ".json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 1000);
+  toast("Exported");
+});
+
+// ----- Data: import -----
+$("importBtn").addEventListener("click", ()=> $("fileInput").click());
+$("fileInput").addEventListener("change", e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.entries)) throw new Error("bad shape");
+      // sanitise imported entries so a hand-edited file can't break the app
+      state = {
+        goal: Number(data.goal) > 0 ? Math.round(Number(data.goal)) : 2000,
+        entries: data.entries
+          .filter(x => x && Number.isFinite(Number(x.calories)) && x.ts)
+          .map(x => ({
+            id: x.id || (Date.now().toString(36)+Math.random().toString(36).slice(2,6)),
+            calories: Math.round(Number(x.calories)),
+            note: typeof x.note==="string" ? x.note : "",
+            ts: new Date(x.ts).toISOString()
+          }))
+      };
+      save();
+      renderAll();
+      toast("Imported " + state.entries.length + " entries");
+    }catch(err){
+      toast("Couldn't read that file");
+    }
+    $("fileInput").value = ""; // allow re-importing the same file
+  };
+  reader.readAsText(file);
+});
+
+// ----- Data: clear -----
+$("clearBtn").addEventListener("click", ()=>{
+  if(!confirm("Delete ALL entries and reset your target? This can't be undone.")) return;
+  state = defaultState();
+  save();
+  renderAll();
+  toast("All data cleared");
+});
+
+// ----- Initial paint -----
+renderAll();
+renderChart(); // force one synchronous chart draw on load (skip the debounce)
+</script>
+</body>
+</html>
